@@ -2,105 +2,70 @@
 
 A premium, single-page prototype that recommends matching earrings from the Jewellos inventory when a shopper selects or uploads a necklace image.
 
-## Live demo
+## Features
 
-- Select any of the 5 provided necklaces → instantly see the 3 best-matching earrings
-- Upload **any** necklace image (including unseen images not in the dataset) → the system visually analyses it and returns the closest earring matches from the inventory
+- **Catalog Selection**: Select any of the 5 provided necklaces → instantly see the 3 best-matching earrings using visual profile matching.
+- **Upload Any Piece**: Upload any necklace image → the system runs in-browser visual analysis (CLIP embeddings) and retrieves the closest earrings from the vector database.
+- **Pure TypeScript Architecture**: 100% hosted on Vercel with zero external backend microservices or servers.
 
-## Run locally
+---
+
+## Run Locally
 
 ```bash
-# Terminal 1 — Python matching service
-cd python-service
-python -m venv venv && source venv/Scripts/activate   # Git Bash / Mac
-pip install -r requirements.txt
-# Copy .env.example to .env and add your PINECONE_API_KEY
-uvicorn main:app --reload --port 8000
+# 1. Install dependencies
+npm install
 
-# Terminal 2 — Seed Pinecone (one time only)
-python seed_embeddings.py
+# 2. Add Pinecone credentials to .env.local
+# PINECONE_API_KEY=your_key
+# PINECONE_INDEX_NAME=jewellos
 
-# Terminal 3 — Next.js frontend
-cd ..
-node node_modules/next/dist/bin/next dev   # http://localhost:3000
+# 3. Start development server
+npm run dev
 ```
 
-## Recommendation approaches
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Colour matching (default for catalog necklaces)
+---
 
-`GET /api/recommend?necklaceId=N01` — returns three ranked earring candidates.
+## Recommendation Approaches
 
-Each of the 20 supplied images is represented by an interpretable **eight-value visual fingerprint**: gold presence, diamond brilliance, emerald, ruby, pearl, temple motif, ornamentation level, and contemporary silhouette. Weighted squared distance between necklace and earring profiles produces the match score. This is fast, explainable, and requires no external services.
+### 1. Heuristic Matching (Catalog necklaces)
+`GET /api/recommend?necklaceId=N01`
+Each catalog piece has an interpretable visual profile (gold, diamonds, gemstones, style motifs). Weighted similarity produces instantaneous, explainable recommendations without external dependencies.
 
-### CLIP AI matching (for uploaded images)
+### 2. Deep Visual Matching (Uploaded pieces)
+`POST /api/clip-recommend`
+- When an image is uploaded, **Transformers.js** (`Xenova/clip-vit-base-patch32`) runs directly in the client browser using WebAssembly to generate a normalized 512-dimension embedding.
+- The 512-dim vector is passed to the Next.js API route `/api/clip-recommend`.
+- Next.js securely queries the **Pinecone** vector database (pre-seeded with all 15 earring embeddings) and returns the highest cosine similarity matches.
 
-`POST /api/clip-recommend` — forwards the uploaded image to the Python service, which returns Pinecone-ranked earrings.
+---
 
-**Flow:**
-```
-15 earring images
-    → CLIP vit-base-patch32 (512-dim embeddings)
-    → stored in Pinecone (cosine metric, us-east-1)
+## Tech Stack
 
-User uploads necklace image
-    → Next.js proxy → FastAPI service
-    → CLIP embedding generated
-    → Pinecone cosine similarity query
-    → Top 3 earrings returned
-```
+- **Framework**: Next.js 15 (App Router) + React 19 + TypeScript
+- **Styling**: Vanilla CSS (Editorial, responsive luxury aesthetics)
+- **Model / Inference**: `@xenova/transformers` (Client-side CLIP ViT-B/32 via WebAssembly)
+- **Vector Database**: Pinecone Serverless (us-east-1) via `@pinecone-database/pinecone`
+- **Deployment**: Vercel (100% serverless, single deployment)
 
-OpenAI's CLIP model encodes visual semantics — material texture, style, colour harmony — at a much deeper level than colour histograms. Because earring embeddings are precomputed and stored in Pinecone, the production query path is just one CLIP inference + one vector query.
+---
 
-### Why two methods?
-
-| | Colour matching | CLIP AI |
-|---|---|---|
-| Speed | Instant (no external call) | ~1–3 s (CLIP inference) |
-| Accuracy | Good for hand-annotated inventory | Better for unseen/uploaded images |
-| Dependencies | None | Python service + Pinecone |
-| Best for | Catalog necklaces | Uploaded / new images |
-
-## Architecture
-
-```
-Vercel (Next.js)
-├── /                       → page.tsx (UI with mode toggle)
-├── /api/recommend          → heuristic matching (GET/POST)
-└── /api/clip-recommend     → proxy to Python CLIP service (POST)
-
-Render (Python FastAPI)
-└── /embed-and-match        → CLIP embedding + Pinecone query
-
-Pinecone (us-east-1)
-└── jwellos index           → 15 earring vectors (512-dim, cosine)
-```
-
-## Tech stack
-
-- **Frontend**: Next.js 15 + React 19 + TypeScript
-- **Styling**: Vanilla CSS (editorial, responsive, dark method section)
-- **AI model**: `openai/clip-vit-base-patch32` via HuggingFace Transformers
-- **Vector DB**: Pinecone (serverless, us-east-1)
-- **API layer**: FastAPI + Uvicorn (Python 3)
-- **Deployment**: Vercel (Next.js) + Render (Python service)
-
-## Project structure
+## Project Structure
 
 ```
 jwellos/
 ├── app/
 │   ├── api/
-│   │   ├── recommend/route.ts        ← heuristic API (existing)
-│   │   └── clip-recommend/route.ts   ← CLIP proxy API (new)
-│   ├── globals.css
+│   │   ├── recommend/route.ts        ← heuristic matching API
+│   │   └── clip-recommend/route.ts   ← Pinecone vector query API
+│   ├── globals.css                   ← luxury styling
 │   ├── layout.tsx
-│   └── page.tsx                      ← main UI with mode toggle
-├── lib/catalog.ts                    ← product data + heuristic matcher
-├── public/inventory/                 ← 5 necklace + 15 earring images
-└── python-service/
-    ├── main.py                       ← FastAPI + CLIP + Pinecone
-    ├── seed_embeddings.py            ← one-time seeding script
-    ├── requirements.txt
-    └── README.md                     ← Render deployment guide
+│   └── page.tsx                      ← main interactive studio
+├── lib/
+│   ├── catalog.ts                    ← product data & heuristic matcher
+│   └── clip-client.ts                ← in-browser Transformers.js CLIP matcher
+└── public/
+    └── inventory/                    ← necklace & earring images
 ```

@@ -62,6 +62,7 @@ export default function Home() {
   const [source, setSource] = useState<"catalog" | "upload">("catalog");
   const [uploadError, setUploadError] = useState("");
   const [matchError, setMatchError] = useState("");
+  const [matchStatus, setMatchStatus] = useState("");
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +72,7 @@ export default function Home() {
     let active = true;
     setLoading(true);
     setMatchError("");
+    setMatchStatus("");
     fetch(`/api/recommend?necklaceId=${selected.id}`)
       .then((r) => r.json())
       .then((data) => active && setMatches(data.matches ?? []))
@@ -86,23 +88,49 @@ export default function Home() {
     setLoading(true);
     setMatchError("");
 
-    const formData = new FormData();
-    formData.append("file", uploadedFile);
-    formData.append("top_k", "3");
+    async function runMatching() {
+      try {
+        setMatchStatus("Analysing image details…");
+        const { getClipEmbedding } = await import("@/lib/clip-client");
+        const vector = await getClipEmbedding(uploadedFile!, (percent) => {
+          if (active && percent > 0 && percent < 100) {
+            setMatchStatus(`Studying piece details (${percent}%)…`);
+          }
+        });
 
-    fetch("/api/clip-recommend", { method: "POST", body: formData })
-      .then(async (r) => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: "Matching failed" }));
+        if (!active) return;
+        setMatchStatus("Finding closest matches in collection…");
+
+        const res = await fetch("/api/clip-recommend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vector, top_k: 3 }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Matching failed" }));
           throw new Error(err.error ?? "Could not reach the matching service.");
         }
-        return r.json();
-      })
-      .then((data) => active && setMatches(enrichMatches(data.matches ?? [])))
-      .catch((err: Error) => {
-        if (active) { setMatchError(err.message); setMatches([]); }
-      })
-      .finally(() => active && setLoading(false));
+
+        const data = await res.json();
+        if (active) {
+          setMatches(enrichMatches(data.matches ?? []));
+        }
+      } catch (err: any) {
+        console.error("Matching error:", err);
+        if (active) {
+          setMatchError(err?.message || "Could not complete the match right now.");
+          setMatches([]);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+          setMatchStatus("");
+        }
+      }
+    }
+
+    runMatching();
 
     return () => { active = false; };
   }, [uploadedFile, source]);
@@ -143,7 +171,7 @@ export default function Home() {
     ? "Your image is being studied for colour, material and form. The closest earrings from our collection will appear below."
     : `${selected.note}. Selected from the Jewellos occasion collection.`;
 
-  const statusText = loading ? "Reading visual details…" : source === "upload" ? "Visual profile ready" : "Visual profile ready";
+  const statusText = matchStatus || (loading ? "Reading visual details…" : "Visual profile ready");
 
   return (
     <main>
