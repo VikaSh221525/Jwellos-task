@@ -5,6 +5,7 @@ export type Product = {
   name: string;
   note: string;
   features: number[];
+  photoFeatures?: number[];
 };
 
 // Visual fingerprint: [gold, diamonds, emerald, ruby, pearl, temple, ornate, contemporary].
@@ -34,6 +35,26 @@ export const products: Product[] = [
 
 export const necklaces = products.filter((product) => product.type === "Necklace");
 
+// Pixel-derived profile: [gold, emerald, ruby, bright sparkle, pearl/cream, saturation, luminance, contrast].
+// It is used only for a newly uploaded necklace, because there is no curated style annotation for an unseen image.
+const uploadedImageProfiles: Record<string, number[]> = {
+  E01: [0.337, 0.006, 0.066, 0.051, 0.093, 0.486, 0.489, 0.25],
+  E02: [0.03, 0.031, 0.004, 0.028, 0.278, 0.092, 0.605, 0.094],
+  E03: [0.019, 0.032, 0.038, 0.463, 0.407, 0.191, 0.832, 0.094],
+  E04: [0.067, 0.025, 0, 0.635, 0.212, 0.168, 0.751, 0.14],
+  E05: [0.085, 0.012, 0.001, 0.052, 0.036, 0.463, 0.269, 0.237],
+  E06: [0.055, 0.017, 0, 0.824, 0.107, 0.052, 0.921, 0.13],
+  E07: [0.002, 0, 0.198, 0.051, 0.004, 0.564, 0.954, 0.057],
+  E08: [0.216, 0.001, 0.011, 0.007, 0.332, 0.195, 0.612, 0.103],
+  E09: [0.185, 0.006, 0.012, 0.006, 0.813, 0.256, 0.816, 0.081],
+  E010: [0.312, 0.001, 0.017, 0.559, 0.04, 0.322, 0.844, 0.216],
+  E011: [0.862, 0.014, 0.017, 0.011, 0.05, 0.392, 0.649, 0.091],
+  E012: [0.906, 0.007, 0.045, 0.003, 0.013, 0.449, 0.753, 0.07],
+  E013: [0.762, 0, 0.012, 0.052, 0.214, 0.368, 0.678, 0.153],
+  E014: [0.868, 0.044, 0.012, 0, 0.534, 0.402, 0.749, 0.134],
+  E015: [0.337, 0, 0.006, 0, 0, 0.677, 0.312, 0.238]
+};
+
 export function findMatches(necklaceId: string, limit = 3) {
   const necklace = products.find((product) => product.id === necklaceId && product.type === "Necklace");
   if (!necklace) return null;
@@ -47,4 +68,17 @@ export function findMatches(necklaceId: string, limit = 3) {
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
   return { necklace, matches: scored };
+}
+
+export function findMatchesForUploadedImage(photoFeatures: number[], limit = 3) {
+  const weights = [1.15, 2.05, 2.05, 0.85, 0.8, 0.45, 0.35, 0.55];
+  return products
+    .filter((product) => product.type === "Earrings")
+    .map((earring) => {
+      const profile = uploadedImageProfiles[earring.id];
+      const distance = profile.reduce((sum, feature, index) => sum + weights[index] * (feature - photoFeatures[index]) ** 2, 0);
+      return { ...earring, score: Math.max(65, Math.round(100 - distance * 38)) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }

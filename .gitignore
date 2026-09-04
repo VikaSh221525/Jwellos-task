@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,3 +41,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 ASSIGNMENT
+
+# Python
+python-service/venv/
+python-service/__pycache__/
+python-service/*.pyc
+python-service/.cache/
+__pycache__/
+*.pyc
+*.pyo
